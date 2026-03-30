@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Voxel Pocket</title>
+  <style>
+    :root {
+      --bg: #87ceeb;
+      --panel: rgba(0,0,0,.35);
+      --btn: rgba(255,255,255,.12);
+      --btn2: rgba(255,255,255,.18);
+      --line: rgba(255,255,255,.22);
+      --text: #fff;
+      --accent: #ffcc33;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      font-family: Inter, system-ui, Arial, sans-serif;
+      touch-action: none;
+    }
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(#87ceeb, #dff3ff 55%, #6fc35a 56%, #62b44f 100%);
+      display: block;
+    }
+    .hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      color: var(--text);
+    }
+    .topbar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.25;
+      box-shadow: 0 6px 18px rgba(0,0,0,.18);
+    }
+    .crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      opacity: .75;
+    }
+    .crosshair::before, .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,.92);
+      border-radius: 2px;
+    }
+    .crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    .crosshair::after { top: 8px; left: 0; width: 18px; height: 2px; }
+
+    .controls {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .move-pad {
+      position: absolute;
+      left: 16px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+      width: 170px;
+      height: 170px;
+      pointer-events: auto;
+      border-radius: 50%;
+      background: rgba(0,0,0,.12);
+      border: 1px solid rgba(255,255,255,.16);
+      touch-action: none;
+    }
+    .move-stick {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 62px;
+      height: 62px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: rgba(255,255,255,.23);
+      border: 1px solid rgba(255,255,255,.25);
+      box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    }
+    .look-zone {
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 54%;
+      height: 72%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    .right-buttons {
+      position: absolute;
+      right: 16px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+      display: grid;
+      grid-template-columns: repeat(2, 68px);
+      gap: 10px;
+      pointer-events: auto;
+    }
+    button {
+      border: 1px solid var(--line);
+      background: var(--btn);
+      color: white;
+      border-radius: 18px;
+      font-size: 14px;
+      font-weight: 700;
+      min-height: 58px;
+      backdrop-filter: blur(8px);
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:active { background: var(--btn2); transform: scale(.98); }
+    .hotbar {
+      position: absolute;
+      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      pointer-events: auto;
+      background: rgba(0,0,0,.2);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 18px;
+      backdrop-filter: blur(8px);
+    }
+    .slot {
+      width: 54px;
+      height: 54px;
+      border-radius: 14px;
+      border: 2px solid transparent;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px;
+      text-align: center;
+    }
+    .slot.active {
+      border-color: var(--accent);
+      background: rgba(255,255,255,.14);
+    }
+    .hint {
+      position: absolute;
+      left: 50%;
+      top: 72px;
+      transform: translateX(-50%);
+      padding: 8px 12px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 999px;
+      font-size: 12px;
+      pointer-events: none;
+      text-align: center;
+    }
+    .dev {
+      position: absolute;
+      right: 10px;
+      top: 76px;
+      pointer-events: auto;
+      display: flex;
+      gap: 8px;
+    }
+    .dev button { min-height: 40px; padding: 0 12px; border-radius: 12px; font-size: 12px; }
+    .editor {
+      position: fixed;
+      inset: auto 10px calc(env(safe-area-inset-bottom, 0px) + 90px) 10px;
+      height: 38%;
+      background: rgba(10,10,14,.88);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 18px;
+      overflow: hidden;
+      display: none;
+      z-index: 20;
+    }
+    .editor.show { display: block; }
+    .editor-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.06);
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    textarea {
+      width: 100%;
+      height: calc(100% - 54px);
+      resize: none;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: #d6f7ff;
+      padding: 12px;
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="hud">
+  <div class="topbar">
+    <div class="panel" id="stats">X: 0 | Y: 2 | Z: 0</div>
+    <div class="panel">Voxel Pocket · móvil</div>
+  </div>
+  <div class="hint">Arrastrá derecha para mirar · stick izquierdo para moverte</div>
+  <div class="crosshair"></div>
+  <div class="controls">
+    <div class="look-zone" id="lookZone"></div>
+    <div class="move-pad" id="movePad"><div class="move-stick" id="moveStick"></div></div>
+    <div class="right-buttons">
+      <button id="jumpBtn">Saltar</button>
+      <button id="placeBtn">Colocar</button>
+      <button id="breakBtn">Romper</button>
+      <button id="saveBtn">Guardar</button>
+    </div>
+  </div>
+  <div class="dev">
+    <button id="editorBtn">Editor</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+  <div class="hotbar" id="hotbar"></div>
+</div>
+<div class="editor" id="editor">
+  <div class="editor-head">
+    <span>Editor rápido (móvil)</span>
+    <button id="runCodeBtn">Aplicar</button>
+  </div>
+  <textarea id="codeBox"></textarea>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const stats = document.getElementById('stats');
+  const hotbar = document.getElementById('hotbar');
+  const editor = document.getElementById('editor');
+  const codeBox = document.getElementById('codeBox');
+
+  const BLOCKS = {
+    grass: { name: 'Pasto', top: '#6fc35a', side: '#7a5b3b' },
+    dirt:  { name: 'Tierra', top: '#7a5b3b', side: '#7a5b3b' },
+    stone: { name: 'Piedra', top: '#8c8f98', side: '#8c8f98' },
+    wood:  { name: 'Madera', top: '#9f7a43', side: '#8a6430' },
+    sand:  { name: 'Arena', top: '#dccb88', side: '#cfbd79' }
+  };
+  const palette = ['grass', 'dirt', 'stone', 'wood', 'sand'];
+
+  const state = {
+    world: new Map(),
+    selected: 'grass',
+    player: { x: 0, y: 2.6, z: 0, yaw: Math.PI / 4, pitch: -0.38, vy: 0, onGround: false },
+    move: { x: 0, y: 0 },
+    touchLook: null,
+    editConfig: {
+      movementSpeed: 0.06,
+      lookSensitivity: 0.005,
+      gravity: 0.015,
+      jumpVelocity: 0.25,
+      renderDistance: 11,
+      fogStrength: 0.032
+    }
+  };
+
+  function key(x, y, z) { return `${x}|${y}|${z}`; }
+  function setBlock(x, y, z, t) { if (t) state.world.set(key(x, y, z), t); else state.world.delete(key(x, y, z)); }
+  function getBlock(x, y, z) { return state.world.get(key(x, y, z)); }
+
+  function generateWorld() {
+    state.world.clear();
+    for (let x = -22; x <= 22; x++) {
+      for (let z = -22; z <= 22; z++) {
+        const h = Math.round(Math.sin(x * 0.45) + Math.cos(z * 0.42));
+        for (let y = -2; y <= h; y++) {
+          const type = y === h ? (h < 0 ? 'sand' : 'grass') : (y < h - 2 ? 'stone' : 'dirt');
+          setBlock(x, y, z, type);
+        }
+        if ((x * x + z * z) % 57 === 0 && h >= 0) {
+          setBlock(x, h + 1, z, 'wood');
+          setBlock(x, h + 2, z, 'wood');
+        }
+      }
+    }
+  }
+
+  function saveWorld() {
+    localStorage.setItem('voxelPocketSave', JSON.stringify({
+      blocks: [...state.world.entries()],
+      player: state.player,
+      selected: state.selected,
+      editConfig: state.editConfig
+    }));
+  }
+  function loadWorld() {
+    const raw = localStorage.getItem('voxelPocketSave');
+    if (!raw) return false;
+    try {
+      const data = JSON.parse(raw);
+      state.world = new Map(data.blocks || []);
+      Object.assign(state.player, data.player || {});
+      state.selected = data.selected || 'grass';
+      Object.assign(state.editConfig, data.editConfig || {});
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function buildHotbar() {
+    hotbar.innerHTML = '';
+    palette.forEach(type => {
+      const b = document.createElement('button');
+      b.className = 'slot' + (state.selected === type ? ' active' : '');
+      b.textContent = BLOCKS[type].name;
+      b.style.background = BLOCKS[type].top;
+      b.addEventListener('click', () => { state.selected = type; buildHotbar(); });
+      hotbar.appendChild(b);
+    });
+  }
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function rotatePoint(x, y, z) {
+    const p = state.player;
+    let dx = x - p.x, dy = y - p.y, dz = z - p.z;
+    const cy = Math.cos(-p.yaw), sy = Math.sin(-p.yaw);
+    let xz = dx * cy - dz * sy;
+    let zz = dx * sy + dz * cy;
+    dx = xz; dz = zz;
+    const cp = Math.cos(-p.pitch), sp = Math.sin(-p.pitch);
+    const yz = dy * cp - dz * sp;
+    zz = dy * sp + dz * cp;
+    dy = yz; dz = zz;
+    return { x: dx, y: dy, z: dz };
+  }
+
+  function project(v) {
+    if (v.z <= 0.1) return null;
+    const f = 380 / v.z;
+    return { x: innerWidth / 2 + v.x * f, y: innerHeight / 2 - v.y * f, scale: f };
+  }
+
+  function shade(hex, amt) {
+    const n = hex.replace('#','');
+    const r = Math.max(0, Math.min(255, parseInt(n.slice(0,2),16) + amt));
+    const g = Math.max(0, Math.min(255, parseInt(n.slice(2,4),16) + amt));
+    const b = Math.max(0, Math.min(255, parseInt(n.slice(4,6),16) + amt));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function renderFace(points, color, dist) {
+    const projected = points.map(project);
+    if (projected.some(p => !p)) return;
+    const fog = Math.min(0.8, dist * state.editConfig.fogStrength);
+    ctx.beginPath();
+    ctx.moveTo(projected[0].x, projected[0].y);
+    for (let i = 1; i < projected.length; i++) ctx.lineTo(projected[i].x, projected[i].y);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,255,255,${0.02 + fog * 0.08})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(0,0,0,${0.1 + fog * 0.35})`;
+    ctx.stroke();
+  }
+
+  function drawBlock(x, y, z, type) {
+    const corners = [
+      [x, y, z],[x+1,y,z],[x+1,y+1,z],[x,y+1,z],
+      [x, y, z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]
+    ].map(([cx,cy,cz]) => rotatePoint(cx,cy,cz));
+
+    const faces = [
+      { idx:[3,2,6,7], color: BLOCKS[type].top, test: !getBlock(x,y+1,z) },
+      { idx:[0,3,7,4], color: shade(BLOCKS[type].side, -12), test: !getBlock(x-1,y,z) },
+      { idx:[1,2,6,5], color: shade(BLOCKS[type].side, 8), test: !getBlock(x+1,y,z) },
+      { idx:[4,5,6,7], color: shade(BLOCKS[type].side, 0), test: !getBlock(x,y,z+1) },
+      { idx:[0,1,2,3], color: shade(BLOCKS[type].side, -22), test: !getBlock(x,y,z-1) }
+    ];
+
+    const visible = [];
+    for (const f of faces) {
+      if (!f.test) continue;
+      const pts = f.idx.map(i => corners[i]);
+      const avgz = pts.reduce((a,b)=>a+b.z,0)/4;
+      if (avgz <= 0.1) continue;
+      visible.push({ pts, color: f.color, avgz });
+    }
+    visible.sort((a,b)=>b.avgz-a.avgz);
+    visible.forEach(f => renderFace(f.pts, f.color, f.avgz));
+  }
+
+  function raycast(maxDist = 6, step = 0.05) {
+    const p = state.player;
+    const dir = {
+      x: Math.sin(p.yaw) * Math.cos(p.pitch),
+      y: -Math.sin(p.pitch),
+      z: Math.cos(p.yaw) * Math.cos(p.pitch)
+    };
+    let lastEmpty = null;
+    for (let d = 0; d < maxDist; d += step) {
+      const x = p.x + dir.x * d;
+      const y = p.y + dir.y * d;
+      const z = p.z + dir.z * d;
+      const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+      if (getBlock(bx, by, bz)) return { hit: { x: bx, y: by, z: bz }, place: lastEmpty };
+      lastEmpty = { x: bx, y: by, z: bz };
+    }
+    return null;
+  }
+
+  function tryBreak() {
+    const r = raycast();
+    if (r?.hit) setBlock(r.hit.x, r.hit.y, r.hit.z, null);
+  }
+  function tryPlace() {
+    const r = raycast();
+    if (!r?.place) return;
+    const { x, y, z } = r.place;
+    const px = Math.floor(state.player.x), py = Math.floor(state.player.y), pz = Math.floor(state.player.z);
+    if (x === px && y === py && z === pz) return;
+    setBlock(x, y, z, state.selected);
+  }
+
+  function physics() {
+    const p = state.player;
+    const speed = state.editConfig.movementSpeed;
+    const forward = { x: Math.sin(p.yaw), z: Math.cos(p.yaw) };
+    const right = { x: Math.sin(p.yaw + Math.PI/2), z: Math.cos(p.yaw + Math.PI/2) };
+
+    let mx = right.x * state.move.x + forward.x * state.move.y;
+    let mz = right.z * state.move.x + forward.z * state.move.y;
+    const len = Math.hypot(mx, mz) || 1;
+    mx = mx / len * Math.min(1, Math.hypot(state.move.x, state.move.y));
+    mz = mz / len * Math.min(1, Math.hypot(state.move.x, state.move.y));
+
+    p.x += mx * speed;
+    p.z += mz * speed;
+
+    p.vy -= state.editConfig.gravity;
+    p.y += p.vy;
+
+    const footY = Math.floor(p.y - 1.75);
+    const bx = Math.floor(p.x), bz = Math.floor(p.z);
+    if (getBlock(bx, footY, bz) || getBlock(bx, footY-1, bz)) {
+      const ground = getBlock(bx, footY, bz) ? footY + 1.76 : footY + 0.76;
+      if (p.y <= ground) {
+        p.y = ground;
+        p.vy = 0;
+        p.onGround = true;
+      }
+    } else {
+      p.onGround = false;
+    }
+    if (p.y < -8) { p.x = 0; p.y = 3; p.z = 0; p.vy = 0; }
+  }
+
+  function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, innerHeight);
+    g.addColorStop(0, '#87ceeb');
+    g.addColorStop(.7, '#d8f1ff');
+    g.addColorStop(.71, '#87bf59');
+    g.addColorStop(1, '#5aa147');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, innerWidth, innerHeight);
+  }
+
+  function render() {
+    drawSky();
+    const arr = [];
+    const rd = state.editConfig.renderDistance;
+    for (const [k, type] of state.world.entries()) {
+      const [x,y,z] = k.split('|').map(Number);
+      const dx = x - state.player.x, dz = z - state.player.z;
+      if (Math.abs(dx) > rd || Math.abs(dz) > rd) continue;
+      const center = rotatePoint(x + .5, y + .5, z + .5);
+      if (center.z <= 0.1) continue;
+      arr.push({ x, y, z, type, dist: center.z });
+    }
+    arr.sort((a,b)=>b.dist-a.dist);
+    arr.forEach(b => drawBlock(b.x, b.y, b.z, b.type));
+
+    const target = raycast();
+    if (target?.hit) {
+      const corners = [
+        [target.hit.x,target.hit.y,target.hit.z],[target.hit.x+1,target.hit.y,target.hit.z],[target.hit.x+1,target.hit.y+1,target.hit.z],[target.hit.x,target.hit.y+1,target.hit.z],
+        [target.hit.x,target.hit.y,target.hit.z+1],[target.hit.x+1,target.hit.y,target.hit.z+1],[target.hit.x+1,target.hit.y+1,target.hit.z+1],[target.hit.x,target.hit.y+1,target.hit.z+1]
+      ].map(([cx,cy,cz]) => project(rotatePoint(cx,cy,cz))).filter(Boolean);
+      if (corners.length) {
+        ctx.strokeStyle = 'rgba(255,255,255,.9)';
+        ctx.lineWidth = 1;
+        const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+        edges.forEach(([a,b]) => {
+          if (!corners[a] || !corners[b]) return;
+          ctx.beginPath(); ctx.moveTo(corners[a].x, corners[a].y); ctx.lineTo(corners[b].x, corners[b].y); ctx.stroke();
+        });
+      }
+    }
+    stats.textContent = `X: ${state.player.x.toFixed(1)} | Y: ${state.player.y.toFixed(1)} | Z: ${state.player.z.toFixed(1)}`;
+  }
+
+  function loop() { physics(); render(); requestAnimationFrame(loop); }
+
+  // Touch joystick
+  const movePad = document.getElementById('movePad');
+  const moveStick = document.getElementById('moveStick');
+  let moveTouchId = null;
+  function setStick(dx, dy) {
+    const max = 48;
+    const len = Math.hypot(dx, dy) || 1;
+    const clamped = Math.min(max, len);
+    const nx = dx / len * clamped;
+    const ny = dy / len * clamped;
+    moveStick.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+    state.move.x = nx / max;
+    state.move.y = -ny / max;
+  }
+  movePad.addEventListener('touchstart', e => {
+    const t = e.changedTouches[0];
+    moveTouchId = t.identifier;
+    const r = movePad.getBoundingClientRect();
+    setStick(t.clientX - (r.left + r.width/2), t.clientY - (r.top + r.height/2));
+  }, { passive: false });
+  movePad.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== moveTouchId) continue;
+      const r = movePad.getBoundingClientRect();
+      setStick(t.clientX - (r.left + r.width/2), t.clientY - (r.top + r.height/2));
+    }
+    e.preventDefault();
+  }, { passive: false });
+  function releaseMove(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier === moveTouchId) {
+        moveTouchId = null;
+        state.move.x = state.move.y = 0;
+        moveStick.style.transform = 'translate(-50%, -50%)';
+      }
+    }
+  }
+  movePad.addEventListener('touchend', releaseMove, { passive: false });
+  movePad.addEventListener('touchcancel', releaseMove, { passive: false });
+
+  const lookZone = document.getElementById('lookZone');
+  let lookId = null, lx = 0, ly = 0;
+  lookZone.addEventListener('touchstart', e => {
+    const t = e.changedTouches[0];
+    lookId = t.identifier; lx = t.clientX; ly = t.clientY;
+  }, { passive: false });
+  lookZone.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookId) continue;
+      const dx = t.clientX - lx, dy = t.clientY - ly;
+      lx = t.clientX; ly = t.clientY;
+      state.player.yaw += dx * state.editConfig.lookSensitivity;
+      state.player.pitch += dy * state.editConfig.lookSensitivity;
+      state.player.pitch = Math.max(-1.2, Math.min(1.2, state.player.pitch));
+    }
+    e.preventDefault();
+  }, { passive: false });
+  lookZone.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null;
+  }, { passive: false });
+
+  document.getElementById('jumpBtn').addEventListener('click', () => {
+    if (state.player.onGround) state.player.vy = state.editConfig.jumpVelocity;
+  });
+  document.getElementById('breakBtn').addEventListener('click', tryBreak);
+  document.getElementById('placeBtn').addEventListener('click', tryPlace);
+  document.getElementById('saveBtn').addEventListener('click', saveWorld);
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    localStorage.removeItem('voxelPocketSave');
+    generateWorld();
+    state.player.x = 0; state.player.y = 3; state.player.z = 0; state.player.vy = 0;
+  });
+
+  // Simple dev editor for mobile
+  const defaultCode = `// Editá valores y tocá "Aplicar"
+({
+  movementSpeed: 0.06,
+  lookSensitivity: 0.005,
+  gravity: 0.015,
+  jumpVelocity: 0.25,
+  renderDistance: 11,
+  fogStrength: 0.032
+})`;
+  codeBox.value = defaultCode;
+  document.getElementById('editorBtn').addEventListener('click', () => {
+    editor.classList.toggle('show');
+    codeBox.value = `({\n  movementSpeed: ${state.editConfig.movementSpeed},\n  lookSensitivity: ${state.editConfig.lookSensitivity},\n  gravity: ${state.editConfig.gravity},\n  jumpVelocity: ${state.editConfig.jumpVelocity},\n  renderDistance: ${state.editConfig.renderDistance},\n  fogStrength: ${state.editConfig.fogStrength}\n})`;
+  });
+  document.getElementById('runCodeBtn').addEventListener('click', () => {
+    try {
+      const cfg = Function(`return ${codeBox.value}`)();
+      Object.assign(state.editConfig, cfg || {});
+      editor.classList.remove('show');
+      saveWorld();
+    } catch (err) {
+      alert('Código inválido: ' + err.message);
+    }
+  });
+
+  // Keyboard fallback desktop/testing
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === ' ') e.preventDefault(); });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+  setInterval(() => {
+    let x = 0, y = 0;
+    if (keys['a']) x -= 1; if (keys['d']) x += 1;
+    if (keys['w']) y += 1; if (keys['s']) y -= 1;
+    if (moveTouchId === null) { state.move.x = x; state.move.y = y; }
+    if (keys['arrowleft']) state.player.yaw -= 0.06;
+    if (keys['arrowright']) state.player.yaw += 0.06;
+    if (keys['arrowup']) state.player.pitch = Math.max(-1.2, state.player.pitch - 0.04);
+    if (keys['arrowdown']) state.player.pitch = Math.min(1.2, state.player.pitch + 0.04);
+    if (keys[' ']) { if (state.player.onGround) state.player.vy = state.editConfig.jumpVelocity; }
+  }, 16);
+
+  if (!loadWorld()) generateWorld();
+  buildHotbar();
+  loop();
+})();
+</script>
+</body>
+</html>
