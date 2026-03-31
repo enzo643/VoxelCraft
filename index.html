@@ -1,72 +1,180 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxelCraft</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoxelCraft</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: white;
+    }
 
-<style>
-body {
-  margin:0;
-  font-family:sans-serif;
-  background:#111;
-  color:white;
-}
+    #menu {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(180deg, #1c1c1c, #000);
+      z-index: 10;
+    }
 
-#menu {
-  position:fixed;
-  width:100%;
-  height:100%;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  align-items:center;
-  background:linear-gradient(#1a1a1a,#000);
-}
+    #menu h1 {
+      font-size: 56px;
+      margin-bottom: 24px;
+    }
 
-h1 {
-  font-size:40px;
-}
+    #menu button {
+      padding: 16px 32px;
+      font-size: 20px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      background: #4caf50;
+      color: white;
+    }
 
-button {
-  padding:15px 30px;
-  font-size:18px;
-  border:none;
-  border-radius:10px;
-  margin-top:20px;
-  background:#4CAF50;
-  color:white;
-}
+    #game {
+      display: none;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
 
-#game {
-  display:none;
-}
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(#87ceeb 0 60%, #7ccf5b 60% 100%);
+    }
 
-canvas {
-  width:100%;
-  height:100%;
-}
-</style>
+    #hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: rgba(0,0,0,.35);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 18px;
+    }
+  </style>
 </head>
-
 <body>
+  <div id="menu">
+    <h1>VoxelCraft</h1>
+    <button onclick="startGame()">Jugar</button>
+  </div>
 
-<div id="menu">
-  <h1>VoxelCraft</h1>
-  <button onclick="start()">Jugar</button>
-</div>
+  <div id="game">
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">Demo iniciada</div>
+  </div>
 
-<div id="game">
-  <canvas id="c"></canvas>
-</div>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-<script>
-function start(){
-  document.getElementById("menu").style.display="none";
-  document.getElementById("game").style.display="block";
-  alert("🔥 Próxima versión: mundo completo + controles");
-}
-</script>
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
 
+    function drawScene() {
+      resizeCanvas();
+
+      // cielo
+      const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      sky.addColorStop(0, "#87ceeb");
+      sky.addColorStop(0.6, "#bfe8ff");
+      sky.addColorStop(0.6001, "#7ccf5b");
+      sky.addColorStop(1, "#5aa03c");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // sol
+      ctx.beginPath();
+      ctx.arc(canvas.width - 120, 100, 40, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffd54a";
+      ctx.fill();
+
+      // bloques simples tipo voxel
+      drawBlock(140, canvas.height - 220, 120, "#8b5a2b", "#6f451f", "#a06b34");
+      drawBlock(260, canvas.height - 220, 120, "#8b5a2b", "#6f451f", "#a06b34");
+      drawBlock(380, canvas.height - 220, 120, "#8b5a2b", "#6f451f", "#a06b34");
+
+      // pasto arriba
+      drawTopGrass(140, canvas.height - 220, 120);
+      drawTopGrass(260, canvas.height - 220, 120);
+      drawTopGrass(380, canvas.height - 220, 120);
+
+      // cruz central
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2;
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 12, cy);
+      ctx.lineTo(cx + 12, cy);
+      ctx.moveTo(cx, cy - 12);
+      ctx.lineTo(cx, cy + 12);
+      ctx.stroke();
+    }
+
+    function drawBlock(x, y, size, front, side, top) {
+      // cara frontal
+      ctx.fillStyle = front;
+      ctx.fillRect(x, y, size, size);
+
+      // cara lateral
+      ctx.fillStyle = side;
+      ctx.beginPath();
+      ctx.moveTo(x + size, y);
+      ctx.lineTo(x + size + 28, y - 18);
+      ctx.lineTo(x + size + 28, y + size - 18);
+      ctx.lineTo(x + size, y + size);
+      ctx.closePath();
+      ctx.fill();
+
+      // cara superior
+      ctx.fillStyle = top;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 28, y - 18);
+      ctx.lineTo(x + size + 28, y - 18);
+      ctx.lineTo(x + size, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawTopGrass(x, y, size) {
+      ctx.fillStyle = "#6dcf4b";
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 28, y - 18);
+      ctx.lineTo(x + size + 28, y - 18);
+      ctx.lineTo(x + size, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function startGame() {
+      document.getElementById("menu").style.display = "none";
+      document.getElementById("game").style.display = "block";
+      drawScene();
+    }
+
+    window.addEventListener("resize", () => {
+      if (document.getElementById("game").style.display === "block") {
+        drawScene();
+      }
+    });
+  </script>
 </body>
 </html>
