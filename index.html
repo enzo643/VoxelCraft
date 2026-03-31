@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VoxelCraft</title>
+  <title>VoxelCraft - Versión 2</title>
   <style>
+    * { box-sizing: border-box; }
     html, body {
       margin: 0;
       width: 100%;
@@ -22,159 +23,510 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      background: linear-gradient(180deg, #1c1c1c, #000);
-      z-index: 10;
+      background: linear-gradient(180deg, #18222f, #0a0a0a);
+      z-index: 20;
+      text-align: center;
+      padding: 20px;
     }
 
     #menu h1 {
       font-size: 56px;
-      margin-bottom: 24px;
+      margin: 0 0 14px;
+      letter-spacing: 1px;
     }
 
-    #menu button {
-      padding: 16px 32px;
-      font-size: 20px;
+    #menu p {
+      max-width: 700px;
+      opacity: 0.9;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    #menu button, #respawnBtn {
+      padding: 14px 26px;
+      font-size: 18px;
       border: none;
       border-radius: 12px;
       cursor: pointer;
-      background: #4caf50;
+      background: #46b04a;
       color: white;
+      font-weight: bold;
     }
 
-    #game {
+    #gameWrap {
       display: none;
       width: 100%;
       height: 100%;
       position: relative;
+      background: #87ceeb;
     }
 
     canvas {
       display: block;
       width: 100%;
       height: 100%;
-      background: linear-gradient(#87ceeb 0 60%, #7ccf5b 60% 100%);
+      image-rendering: pixelated;
+      cursor: crosshair;
     }
 
     #hud {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: 14px;
+      left: 14px;
       background: rgba(0,0,0,.35);
-      padding: 10px 14px;
+      backdrop-filter: blur(4px);
+      padding: 12px 14px;
+      border-radius: 12px;
+      z-index: 5;
+      font-size: 14px;
+      line-height: 1.5;
+      user-select: none;
+    }
+
+    #hotbar {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 5;
+      background: rgba(0,0,0,.25);
+      padding: 8px;
+      border-radius: 14px;
+      backdrop-filter: blur(4px);
+    }
+
+    .slot {
+      width: 58px;
+      height: 58px;
+      border: 3px solid rgba(255,255,255,.25);
       border-radius: 10px;
-      font-size: 18px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,.6);
+    }
+
+    .slot.active {
+      border-color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.25);
+    }
+
+    #respawnBtn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 5;
+      font-size: 14px;
+      padding: 10px 14px;
     }
   </style>
 </head>
 <body>
   <div id="menu">
     <h1>VoxelCraft</h1>
+    <p>
+      Versión 2 jugable. Movete con <b>A / D</b>, saltá con <b>W</b> o <b>Espacio</b>.
+      <b>Clic izquierdo</b> rompe bloques, <b>clic derecho</b> coloca.
+      Elegí bloque con <b>1, 2, 3</b> o tocando la barra inferior.
+    </p>
     <button onclick="startGame()">Jugar</button>
   </div>
 
-  <div id="game">
-    <canvas id="gameCanvas"></canvas>
-    <div id="hud">Demo iniciada</div>
+  <div id="gameWrap">
+    <canvas id="game"></canvas>
+    <button id="respawnBtn">Respawn</button>
+    <div id="hud"></div>
+    <div id="hotbar"></div>
   </div>
 
   <script>
-    const canvas = document.getElementById("gameCanvas");
+    const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
+    const hud = document.getElementById("hud");
+    const hotbar = document.getElementById("hotbar");
+    const menu = document.getElementById("menu");
+    const gameWrap = document.getElementById("gameWrap");
+    const respawnBtn = document.getElementById("respawnBtn");
+
+    const TILE = 40;
+    const WORLD_W = 120;
+    const WORLD_H = 28;
+
+    const BLOCKS = {
+      air: 0,
+      grass: 1,
+      dirt: 2,
+      stone: 3
+    };
+
+    const blockInfo = [
+      { name: "Aire", color: "transparent" },
+      { name: "Pasto", color: "#5dbb46" },
+      { name: "Tierra", color: "#8b5a2b" },
+      { name: "Piedra", color: "#7d7d7d" }
+    ];
+
+    let world = [];
+    let camera = { x: 0, y: 0 };
+    let selectedBlock = BLOCKS.grass;
+
+    const player = {
+      x: 8 * TILE,
+      y: 5 * TILE,
+      w: 28,
+      h: 36,
+      vx: 0,
+      vy: 0,
+      speed: 4.2,
+      jump: 12,
+      onGround: false,
+      color: "#e33d3d"
+    };
+
+    const keys = {};
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
 
-    function drawScene() {
-      resizeCanvas();
+    function createWorld() {
+      world = [];
+      for (let y = 0; y < WORLD_H; y++) {
+        const row = [];
+        for (let x = 0; x < WORLD_W; x++) {
+          row.push(BLOCKS.air);
+        }
+        world.push(row);
+      }
 
-      // cielo
+      for (let x = 0; x < WORLD_W; x++) {
+        const ground = 18 + Math.floor(Math.sin(x * 0.35) * 2);
+        for (let y = ground; y < WORLD_H; y++) {
+          if (y === ground) {
+            world[y][x] = BLOCKS.grass;
+          } else if (y < ground + 3) {
+            world[y][x] = BLOCKS.dirt;
+          } else {
+            world[y][x] = BLOCKS.stone;
+          }
+        }
+      }
+
+      // plataformas simples
+      for (let x = 12; x < 18; x++) world[13][x] = BLOCKS.dirt;
+      for (let x = 24; x < 29; x++) world[11][x] = BLOCKS.stone;
+      for (let x = 40; x < 45; x++) world[9][x] = BLOCKS.dirt;
+      for (let x = 55; x < 63; x++) world[14][x] = BLOCKS.stone;
+
+      // arboles simples
+      placeTree(10, findGround(10) - 1);
+      placeTree(20, findGround(20) - 1);
+      placeTree(34, findGround(34) - 1);
+      placeTree(50, findGround(50) - 1);
+    }
+
+    function placeTree(x, y) {
+      for (let i = 0; i < 3; i++) {
+        if (inside(x, y - i)) world[y - i][x] = BLOCKS.dirt;
+      }
+      const leaves = [
+        [x-1, y-3],[x, y-3],[x+1, y-3],
+        [x-1, y-4],[x, y-4],[x+1, y-4],
+        [x, y-5]
+      ];
+      for (const [lx, ly] of leaves) {
+        if (inside(lx, ly)) world[ly][lx] = BLOCKS.grass;
+      }
+    }
+
+    function findGround(x) {
+      for (let y = 0; y < WORLD_H; y++) {
+        if (world[y][x] !== BLOCKS.air) return y;
+      }
+      return WORLD_H - 1;
+    }
+
+    function inside(x, y) {
+      return x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H;
+    }
+
+    function getBlock(x, y) {
+      if (!inside(x, y)) return BLOCKS.stone;
+      return world[y][x];
+    }
+
+    function setBlock(x, y, type) {
+      if (!inside(x, y)) return;
+      world[y][x] = type;
+    }
+
+    function solidAtPixel(px, py) {
+      const tx = Math.floor(px / TILE);
+      const ty = Math.floor(py / TILE);
+      return getBlock(tx, ty) !== BLOCKS.air;
+    }
+
+    function rectCollides(x, y, w, h) {
+      return (
+        solidAtPixel(x, y) ||
+        solidAtPixel(x + w, y) ||
+        solidAtPixel(x, y + h) ||
+        solidAtPixel(x + w, y + h)
+      );
+    }
+
+    function spawnPlayer() {
+      player.x = 8 * TILE;
+      player.y = 4 * TILE;
+      player.vx = 0;
+      player.vy = 0;
+    }
+
+    function updatePlayer() {
+      player.vx = 0;
+      if (keys["a"] || keys["ArrowLeft"]) player.vx = -player.speed;
+      if (keys["d"] || keys["ArrowRight"]) player.vx = player.speed;
+
+      if ((keys["w"] || keys[" "] || keys["ArrowUp"]) && player.onGround) {
+        player.vy = -player.jump;
+        player.onGround = false;
+      }
+
+      player.vy += 0.6;
+      if (player.vy > 14) player.vy = 14;
+
+      let nextX = player.x + player.vx;
+      if (!rectCollides(nextX, player.y, player.w, player.h)) {
+        player.x = nextX;
+      } else {
+        while (!rectCollides(player.x + Math.sign(player.vx), player.y, player.w, player.h)) {
+          player.x += Math.sign(player.vx);
+        }
+      }
+
+      let nextY = player.y + player.vy;
+      if (!rectCollides(player.x, nextY, player.w, player.h)) {
+        player.y = nextY;
+        player.onGround = false;
+      } else {
+        if (player.vy > 0) player.onGround = true;
+        while (!rectCollides(player.x, player.y + Math.sign(player.vy), player.w, player.h)) {
+          player.y += Math.sign(player.vy);
+        }
+        player.vy = 0;
+      }
+
+      if (player.y > WORLD_H * TILE + 400) {
+        spawnPlayer();
+      }
+
+      camera.x = player.x - canvas.width / 2 + player.w / 2;
+      camera.y = player.y - canvas.height / 2 + player.h / 2;
+
+      const maxCamX = WORLD_W * TILE - canvas.width;
+      const maxCamY = WORLD_H * TILE - canvas.height;
+      camera.x = Math.max(0, Math.min(camera.x, Math.max(0, maxCamX)));
+      camera.y = Math.max(0, Math.min(camera.y, Math.max(0, maxCamY)));
+    }
+
+    function drawBackground() {
       const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
       sky.addColorStop(0, "#87ceeb");
-      sky.addColorStop(0.6, "#bfe8ff");
-      sky.addColorStop(0.6001, "#7ccf5b");
-      sky.addColorStop(1, "#5aa03c");
+      sky.addColorStop(1, "#dff5ff");
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // sol
+      ctx.fillStyle = "#ffd34d";
       ctx.beginPath();
       ctx.arc(canvas.width - 120, 100, 40, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffd54a";
       ctx.fill();
+    }
 
-      // bloques simples tipo voxel
-      drawBlock(140, canvas.height - 220, 120, "#8b5a2b", "#6f451f", "#a06b34");
-      drawBlock(260, canvas.height - 220, 120, "#8b5a2b", "#6f451f", "#a06b34");
-      drawBlock(380, canvas.height - 220, 120, "#8b5a2b", "#6f451f", "#a06b34");
+    function drawWorld() {
+      const startX = Math.floor(camera.x / TILE);
+      const endX = Math.ceil((camera.x + canvas.width) / TILE);
+      const startY = Math.floor(camera.y / TILE);
+      const endY = Math.ceil((camera.y + canvas.height) / TILE);
 
-      // pasto arriba
-      drawTopGrass(140, canvas.height - 220, 120);
-      drawTopGrass(260, canvas.height - 220, 120);
-      drawTopGrass(380, canvas.height - 220, 120);
+      for (let y = startY; y <= endY; y++) {
+        for (let x = startX; x <= endX; x++) {
+          if (!inside(x, y)) continue;
+          const block = getBlock(x, y);
+          if (block === BLOCKS.air) continue;
 
-      // cruz central
-      ctx.strokeStyle = "white";
-      ctx.lineWidth = 2;
+          const sx = x * TILE - camera.x;
+          const sy = y * TILE - camera.y;
+
+          if (block === BLOCKS.grass) {
+            ctx.fillStyle = "#8b5a2b";
+            ctx.fillRect(sx, sy, TILE, TILE);
+            ctx.fillStyle = "#5dbb46";
+            ctx.fillRect(sx, sy, TILE, 10);
+          } else if (block === BLOCKS.dirt) {
+            ctx.fillStyle = "#8b5a2b";
+            ctx.fillRect(sx, sy, TILE, TILE);
+          } else if (block === BLOCKS.stone) {
+            ctx.fillStyle = "#7d7d7d";
+            ctx.fillRect(sx, sy, TILE, TILE);
+            ctx.fillStyle = "#6b6b6b";
+            ctx.fillRect(sx + 4, sy + 6, 8, 6);
+            ctx.fillRect(sx + 18, sy + 12, 10, 7);
+            ctx.fillRect(sx + 12, sy + 24, 12, 6);
+          }
+
+          ctx.strokeStyle = "rgba(0,0,0,.08)";
+          ctx.strokeRect(sx, sy, TILE, TILE);
+        }
+      }
+    }
+
+    function drawPlayer() {
+      const sx = player.x - camera.x;
+      const sy = player.y - camera.y;
+
+      ctx.fillStyle = player.color;
+      ctx.fillRect(sx, sy, player.w, player.h);
+
+      ctx.fillStyle = "#ffd7b3";
+      ctx.fillRect(sx + 4, sy + 4, 20, 12);
+
+      ctx.fillStyle = "#222";
+      ctx.fillRect(sx + 8, sy + 8, 3, 3);
+      ctx.fillRect(sx + 17, sy + 8, 3, 3);
+    }
+
+    function drawCrosshair() {
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
+      ctx.strokeStyle = "rgba(255,255,255,.9)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(cx - 12, cy);
-      ctx.lineTo(cx + 12, cy);
-      ctx.moveTo(cx, cy - 12);
-      ctx.lineTo(cx, cy + 12);
+      ctx.moveTo(cx - 10, cy);
+      ctx.lineTo(cx + 10, cy);
+      ctx.moveTo(cx, cy - 10);
+      ctx.lineTo(cx, cy + 10);
       ctx.stroke();
     }
 
-    function drawBlock(x, y, size, front, side, top) {
-      // cara frontal
-      ctx.fillStyle = front;
-      ctx.fillRect(x, y, size, size);
+    function render() {
+      drawBackground();
+      drawWorld();
+      drawPlayer();
+      drawCrosshair();
 
-      // cara lateral
-      ctx.fillStyle = side;
-      ctx.beginPath();
-      ctx.moveTo(x + size, y);
-      ctx.lineTo(x + size + 28, y - 18);
-      ctx.lineTo(x + size + 28, y + size - 18);
-      ctx.lineTo(x + size, y + size);
-      ctx.closePath();
-      ctx.fill();
+      const tx = Math.floor((camera.x + canvas.width / 2) / TILE);
+      const ty = Math.floor((camera.y + canvas.height / 2) / TILE);
 
-      // cara superior
-      ctx.fillStyle = top;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 28, y - 18);
-      ctx.lineTo(x + size + 28, y - 18);
-      ctx.lineTo(x + size, y);
-      ctx.closePath();
-      ctx.fill();
+      hud.innerHTML = `
+        <b>Posición:</b> ${Math.floor(player.x / TILE)}, ${Math.floor(player.y / TILE)}<br>
+        <b>Bloque seleccionado:</b> ${blockInfo[selectedBlock].name}<br>
+        <b>Mira:</b> ${tx}, ${ty}
+      `;
     }
 
-    function drawTopGrass(x, y, size) {
-      ctx.fillStyle = "#6dcf4b";
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 28, y - 18);
-      ctx.lineTo(x + size + 28, y - 18);
-      ctx.lineTo(x + size, y);
-      ctx.closePath();
-      ctx.fill();
+    function gameLoop() {
+      updatePlayer();
+      render();
+      requestAnimationFrame(gameLoop);
     }
 
-    function startGame() {
-      document.getElementById("menu").style.display = "none";
-      document.getElementById("game").style.display = "block";
-      drawScene();
+    function updateHotbar() {
+      hotbar.innerHTML = "";
+      const options = [BLOCKS.grass, BLOCKS.dirt, BLOCKS.stone];
+      options.forEach((blockId, index) => {
+        const slot = document.createElement("div");
+        slot.className = "slot" + (selectedBlock === blockId ? " active" : "");
+        slot.style.background = blockInfo[blockId].color;
+        slot.textContent = index + 1;
+        slot.title = blockInfo[blockId].name;
+        slot.onclick = () => {
+          selectedBlock = blockId;
+          updateHotbar();
+        };
+        hotbar.appendChild(slot);
+      });
     }
 
-    window.addEventListener("resize", () => {
-      if (document.getElementById("game").style.display === "block") {
-        drawScene();
+    function screenToTile(mx, my) {
+      return {
+        x: Math.floor((mx + camera.x) / TILE),
+        y: Math.floor((my + camera.y) / TILE)
+      };
+    }
+
+    function canEditBlock(tx, ty) {
+      const blockPx = tx * TILE;
+      const blockPy = ty * TILE;
+      const overlap = !(
+        player.x + player.w <= blockPx ||
+        player.x >= blockPx + TILE ||
+        player.y + player.h <= blockPy ||
+        player.y >= blockPy + TILE
+      );
+      return !overlap;
+    }
+
+    canvas.addEventListener("mousedown", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const { x, y } = screenToTile(mx, my);
+
+      if (!inside(x, y)) return;
+
+      if (e.button === 0) {
+        setBlock(x, y, BLOCKS.air);
       }
     });
+
+    canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const { x, y } = screenToTile(mx, my);
+
+      if (!inside(x, y)) return;
+      if (getBlock(x, y) === BLOCKS.air && canEditBlock(x, y)) {
+        setBlock(x, y, selectedBlock);
+      }
+    });
+
+    window.addEventListener("keydown", (e) => {
+      keys[e.key] = true;
+
+      if (e.key === "1") selectedBlock = BLOCKS.grass;
+      if (e.key === "2") selectedBlock = BLOCKS.dirt;
+      if (e.key === "3") selectedBlock = BLOCKS.stone;
+      updateHotbar();
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys[e.key] = false;
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+
+    respawnBtn.addEventListener("click", spawnPlayer);
+
+    function startGame() {
+      menu.style.display = "none";
+      gameWrap.style.display = "block";
+      resizeCanvas();
+      createWorld();
+      spawnPlayer();
+      updateHotbar();
+      gameLoop();
+    }
   </script>
 </body>
 </html>
